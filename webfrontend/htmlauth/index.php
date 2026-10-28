@@ -44,7 +44,17 @@ $mqtt_use_gateway = $config['mqtt']['use_loxberry_gateway'] ?? true;
 $mqtt_topic_prefix = $config['mqtt']['topic_prefix'] ?? 'panasonictv';
 $poll_active = $config['polling']['interval_active'] ?? 5;
 $poll_standby = $config['polling']['interval_standby'] ?? 30;
-$log_level = $config['system']['loglevel'] ?? 6;
+
+// Read LoxBerry native plugin loglevel (set in LoxBerry Plugin Management widget)
+$lb_sys_loglevel = null;
+if (class_exists('LBSystem') && method_exists('LBSystem', 'pluginloglevel')) {
+    $lb_sys_loglevel = LBSystem::pluginloglevel();
+}
+if ($lb_sys_loglevel !== null && $lb_sys_loglevel !== '' && is_numeric($lb_sys_loglevel)) {
+    $log_level = intval($lb_sys_loglevel);
+} else {
+    $log_level = $config['system']['loglevel'] ?? 6;
+}
 
 // Read LoxBerry MQTT Gateway info if function exists
 $lb_mqtt_info = __t('MQTT.LABEL_USE_LB_GATEWAY', 'Integriertes Gateway');
@@ -570,8 +580,9 @@ if ($form === 'logs') {
                         <option value="6" <?php echo ($log_level == 6 || $log_level === 'INFO') ? 'selected' : ''; ?>>INFO (Standard)</option>
                         <option value="4" <?php echo ($log_level == 4 || $log_level === 'WARNING') ? 'selected' : ''; ?>>WARNING (Nur Warnungen und Fehler)</option>
                         <option value="3" <?php echo ($log_level == 3 || $log_level === 'ERROR') ? 'selected' : ''; ?>>ERROR (Nur Fehler)</option>
+                        <option value="0" <?php echo ($log_level === 0 || $log_level === '0' || $log_level === 'OFF') ? 'selected' : ''; ?>>AUS (Kein Logging)</option>
                     </select>
-                    <div class="form-hint"><?php echo __t('LOGGING.HINT_LOGLEVEL', 'DEBUG für detaillierte Fehlersuche.'); ?></div>
+                    <div class="form-hint"><?php echo __t('LOGGING.HINT_LOGLEVEL', 'Wird auch mit der LoxBerry Plugin-Übersicht synchronisiert.'); ?></div>
                 </div>
             </div>
         </div>

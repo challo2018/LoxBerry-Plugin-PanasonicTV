@@ -53,26 +53,76 @@ def get_log_file() -> str:
     except Exception:
         return "/tmp/panasonictv_daemon.log"
 
+def get_plugin_loglevel() -> int:
+    """
+    Determine LoxBerry loglevel in priority order:
+    1. LoxBerry system plugindatabase.json (configured via Plugin Management UI widget)
+    2. Plugin config panasonictv.json ('system' -> 'loglevel')
+    3. Default to 6 (INFO)
+    """
+    lb_home = os.environ.get("LBHOMEDIR", "REPLACELBHOMEDIR")
+    lbs_data = os.environ.get("LBSDATADIR", os.path.join(lb_home, "data", "system"))
+    db_candidates = [
+        os.path.join(lbs_data, "plugindatabase.json"),
+        os.path.join(lb_home, "data", "system", "plugindatabase.json")
+    ]
+    for db_path in db_candidates:
+        if db_path and os.path.exists(db_path):
+            try:
+                with open(db_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                plugins = data.get("plugins", {})
+                plugin_list = plugins.values() if isinstance(plugins, dict) else plugins
+                for p in plugin_list:
+                    if isinstance(p, dict):
+                        name = str(p.get("name", "")).lower()
+                        folder = str(p.get("folder", "")).lower()
+                        if name == "panasonictv" or folder == "panasonictv":
+                            lvl = p.get("loglevel")
+                            if lvl is not None:
+                                return int(lvl)
+            except Exception:
+                pass
+
+    # Fallback: check plugin's own panasonictv.json
+    cfg = load_config()
+    sys_cfg = cfg.get("system", {})
+    lvl = sys_cfg.get("loglevel")
+    if lvl is not None:
+        try:
+            return int(lvl)
+        except (ValueError, TypeError):
+            pass
+
+    return 6  # LoxBerry default: INFO (6)
+
 # Setup Logger
 logger = logging.getLogger("panasonictv_daemon")
 logger.setLevel(logging.INFO)
 
 def update_logger_level(level_setting):
     level_map = {
+        0: logging.CRITICAL + 10,  # OFF in LoxBerry
         1: logging.CRITICAL,
         2: logging.CRITICAL,
-        3: logging.ERROR,
-        4: logging.WARNING,
+        3: logging.ERROR,          # ERROR in LoxBerry
+        4: logging.WARNING,        # WARNING in LoxBerry
         5: logging.INFO,
-        6: logging.INFO,
-        7: logging.DEBUG,
+        6: logging.INFO,           # INFO in LoxBerry
+        7: logging.DEBUG,          # DEBUG in LoxBerry
+        "OFF": logging.CRITICAL + 10,
         "DEBUG": logging.DEBUG,
         "INFO": logging.INFO,
         "WARNING": logging.WARNING,
-        "ERROR": logging.ERROR
+        "WARN": logging.WARNING,
+        "ERROR": logging.ERROR,
+        "CRITICAL": logging.CRITICAL
     }
     lvl = level_map.get(level_setting, logging.INFO)
     logger.setLevel(lvl)
+
+# Initialize with current system log level
+update_logger_level(get_plugin_loglevel())
 
 # Add Handlers
 log_formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -281,7 +331,8 @@ class PanasonicDaemon:
         self.macros = self.config.get("macros", {})
         self.sys_cfg = self.config.get("system", {})
 
-        update_logger_level(self.sys_cfg.get("loglevel", 6))
+        self.current_loglevel = get_plugin_loglevel()
+        update_logger_level(self.current_loglevel)
 
         self.host = self.tv_cfg.get("host", "")
         self.port = self.tv_cfg.get("port", 55000)
@@ -343,7 +394,8 @@ class PanasonicDaemon:
         self.macros = self.config.get("macros", {})
         self.sys_cfg = self.config.get("system", {})
 
-        update_logger_level(self.sys_cfg.get("loglevel", 6))
+        self.current_loglevel = get_plugin_loglevel()
+        update_logger_level(self.current_loglevel)
 
         self.host = self.tv_cfg.get("host", "")
         self.port = self.tv_cfg.get("port", 55000)
@@ -637,11 +689,21 @@ class PanasonicDaemon:
 
     def run(self):
         self.setup_mqtt()
-        logger.info(f"Panasonic TV Daemon started for {self.host}:{self.port}. Entering main loop...")
+        logger.info(f"Panasonic TV Daemon started for {self.host}:{self.port} (LogLevel: {self.current_loglevel}). Entering main loop...")
         last_poll = 0.0
+        last_lvl_check = time.time()
 
         while RUNNING:
             now = time.time()
+            # Dynamically adopt loglevel changes from LoxBerry Plugin Management widget
+            if now - last_lvl_check >= 15.0:
+                new_lvl = get_plugin_loglevel()
+                if new_lvl != self.current_loglevel:
+                    logger.info(f"Detected LoxBerry loglevel change: {self.current_loglevel} -> {new_lvl}")
+                    self.current_loglevel = new_lvl
+                    update_logger_level(new_lvl)
+                last_lvl_check = now
+
             interval = self.interval_active if self.last_state.get("online") else self.interval_standby
             if now - last_poll >= interval:
                 self.poll_tv_state()

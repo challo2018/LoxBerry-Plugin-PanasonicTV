@@ -53,13 +53,55 @@ def get_log_file() -> str:
     except Exception:
         return "/tmp/panasonictv_daemon.log"
 
+def get_plugin_loglevel() -> int:
+    """
+    Determine LoxBerry loglevel in priority order:
+    1. LoxBerry system plugindatabase.json (configured via Plugin Management UI widget)
+    2. Plugin config panasonictv.json ('system' -> 'loglevel')
+    3. Default to 6 (INFO)
+    """
+    lb_home = os.environ.get("LBHOMEDIR", "REPLACELBHOMEDIR")
+    lbs_data = os.environ.get("LBSDATADIR", os.path.join(lb_home, "data", "system"))
+    db_candidates = [
+        os.path.join(lbs_data, "plugindatabase.json"),
+        os.path.join(lb_home, "data", "system", "plugindatabase.json")
+    ]
+    for db_path in db_candidates:
+        if db_path and os.path.exists(db_path):
+            try:
+                with open(db_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                plugins = data.get("plugins", {})
+                plugin_list = plugins.values() if isinstance(plugins, dict) else plugins
+                for p in plugin_list:
+                    if isinstance(p, dict):
+                        name = str(p.get("name", "")).lower()
+                        folder = str(p.get("folder", "")).lower()
+                        if name == "panasonictv" or folder == "panasonictv":
+                            lvl = p.get("loglevel")
+                            if lvl is not None:
+                                return int(lvl)
+            except Exception:
+                pass
+
+    # Fallback: check plugin's own panasonictv.json
+    cfg = load_config()
+    sys_cfg = cfg.get("system", {})
+    lvl = sys_cfg.get("loglevel")
+    if lvl is not None:
+        try:
+            return int(lvl)
+        except (ValueError, TypeError):
+            pass
+
+    return 6
+
 # Setup logger
 logger = logging.getLogger("panasonictv_control")
 logger.setLevel(logging.INFO)
 
-log_cfg = load_config().get("system", {})
-log_lvl_val = log_cfg.get("loglevel", 6)
 level_map = {
+    0: logging.CRITICAL + 10,
     1: logging.CRITICAL,
     2: logging.CRITICAL,
     3: logging.ERROR,
@@ -67,12 +109,14 @@ level_map = {
     5: logging.INFO,
     6: logging.INFO,
     7: logging.DEBUG,
+    "OFF": logging.CRITICAL + 10,
     "DEBUG": logging.DEBUG,
     "INFO": logging.INFO,
     "WARNING": logging.WARNING,
+    "WARN": logging.WARNING,
     "ERROR": logging.ERROR
 }
-logger.setLevel(level_map.get(log_lvl_val, logging.INFO))
+logger.setLevel(level_map.get(get_plugin_loglevel(), logging.INFO))
 
 # Add rotating file handler
 try:

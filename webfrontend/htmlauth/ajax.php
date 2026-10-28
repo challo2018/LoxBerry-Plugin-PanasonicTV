@@ -83,6 +83,34 @@ function get_daemon_script() {
     return dirname(__DIR__, 2) . "/bin/panasonictv_daemon.py";
 }
 
+function sync_plugin_loglevel_to_system($new_level) {
+    global $lbsdatadir;
+    $lb_home = getenv('LBHOMEDIR') ?: 'REPLACELBHOMEDIR';
+    $db_path = !empty($lbsdatadir) ? "$lbsdatadir/plugindatabase.json" : "$lb_home/data/system/plugindatabase.json";
+    if (file_exists($db_path) && is_writable($db_path)) {
+        try {
+            $raw = file_get_contents($db_path);
+            $data = json_decode($raw, true);
+            if (is_array($data) && isset($data['plugins'])) {
+                $changed = false;
+                foreach ($data['plugins'] as $key => &$plugin) {
+                    $name = strtolower($plugin['name'] ?? '');
+                    $folder = strtolower($plugin['folder'] ?? '');
+                    if ($name === 'panasonictv' || $folder === 'panasonictv') {
+                        $plugin['loglevel'] = intval($new_level);
+                        $changed = true;
+                    }
+                }
+                if ($changed) {
+                    file_put_contents($db_path, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+                }
+            }
+        } catch (\Throwable $t) {
+            // Non-fatal
+        }
+    }
+}
+
 function parse_command_json($output_array) {
     if (!is_array($output_array) || empty($output_array)) {
         return null;
@@ -244,7 +272,11 @@ try {
 
             if (isset($input['system']['loglevel'])) {
                 $lvl = $input['system']['loglevel'];
-                $config['system']['loglevel'] = is_numeric($lvl) ? intval($lvl) : $lvl;
+                $parsed_lvl = is_numeric($lvl) ? intval($lvl) : $lvl;
+                $config['system']['loglevel'] = $parsed_lvl;
+                if (is_numeric($parsed_lvl)) {
+                    sync_plugin_loglevel_to_system($parsed_lvl);
+                }
             }
 
             $dir = dirname($cfg_file);
