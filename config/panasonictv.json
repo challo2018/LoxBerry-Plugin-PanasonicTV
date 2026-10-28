@@ -1,0 +1,47 @@
+{
+  "tv": {
+    "host": "",
+    "port": 55000,
+    "mac": "",
+    "app_id": "",
+    "encryption_key": "",
+    "requires_encryption": false,
+    "model": "TX-55EX600W"
+  },
+  "mqtt": {
+    "use_loxberry_gateway": true,
+    "broker_host": "localhost",
+    "broker_port": 1883,
+    "broker_user": "",
+    "broker_pass": "",
+    "topic_prefix": "panasonictv"
+  },
+  "polling": {
+    "enabled": true,
+    "interval_active": 5,
+    "interval_standby": 30
+  },
+  "macros": {
+    "home_theater": [
+      "NRC_VIERA_LINK-ONOFF",
+      "SLEEP:700",
+      "NRC_DOWN-ONOFF",
+      "SLEEP:300",
+      "NRC_RIGHT-ONOFF",
+      "SLEEP:500",
+      "NRC_RETURN-ONOFF"
+    ],
+    "tv_speakers": [
+      "NRC_VIERA_LINK-ONOFF",
+      "SLEEP:700",
+      "NRC_DOWN-ONOFF",
+      "SLEEP:300",
+      "NRC_LEFT-ONOFF",
+      "SLEEP:500",
+      "NRC_RETURN-ONOFF"
+    ]
+  },
+  "system": {
+    "loglevel": 6
+  }
+}

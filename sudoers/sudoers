@@ -1,0 +1,9 @@
+# sudoers/sudoers - Sudoers rules for Panasonic TV plugin.
+#
+# This file is installed to /etc/sudoers.d/<NAME> during plugin installation.
+# The placeholder REPLACELBPBINDIR is automatically replaced by the installer
+# with the actual path to this plugin's bin/ directory.
+#
+# Panasonic TV control uses direct IP network communication (SOAP and WOL)
+# and does not require elevated root permissions.
+# %loxberry ALL = NOPASSWD: REPLACELBPBINDIR/panasonictv_control.py
