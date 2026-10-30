@@ -31,9 +31,6 @@ if (!file_exists($cfg_file)) {
 }
 $config = file_exists($cfg_file) ? json_decode(file_get_contents($cfg_file), true) : [];
 
-// Read form parameter
-$form = isset($_REQUEST['form']) ? $_REQUEST['form'] : 'main';
-
 // Safe default values
 $tv_host = $config['tv']['host'] ?? '';
 $tv_port = $config['tv']['port'] ?? 55000;
@@ -65,211 +62,12 @@ if (function_exists('mqtt_connectiondetails')) {
     }
 }
 
-// Navigation Bar (renders inline in LoxBerry)
-$navbar[1]['Name']   = __t('TV.SECTION_TITLE', 'Einstellungen & Steuerung');
-$navbar[1]['URL']    = 'index.php?form=main';
-$navbar[1]['active'] = ($form === 'main');
-
-$navbar[2]['Name']   = __t('LOGGING.SECTION_TITLE', 'Logdatei & Diagnose');
-$navbar[2]['URL']    = 'index.php?form=logs';
-$navbar[2]['active'] = ($form === 'logs');
-
 // Render LoxBerry Header (4th parameter true = no jQuery Mobile, pure LoxBerry Design System)
 $template_title = __t('COMMON.PLUGIN_TITLE', 'Panasonic TV');
 $helplink = "https://wiki.loxberry.de/";
 $helptemplate = "help.html";
 
 LBWeb::lbheader($template_title, $helplink, $helptemplate, true);
-
-if ($form === 'logs') {
-    ?>
-    <div class="lb-content">
-        <style>
-        .card-box {
-            background: #ffffff;
-            border: 1px solid #dcdde1;
-            border-radius: 8px;
-            padding: 20px;
-            margin-bottom: 22px;
-            box-shadow: 0 1px 4px rgba(0,0,0,0.04);
-        }
-        .card-header-bar {
-            border-bottom: 2px solid #f1f2f6;
-            padding-bottom: 12px;
-            margin-bottom: 16px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 10px;
-        }
-        .card-header-bar h2 {
-            margin: 0;
-            font-size: 1.25rem;
-            color: #2f3640;
-        }
-        .remote-btn {
-            padding: 8px 14px;
-            border: 1px solid #ccc;
-            background: #fdfdfd;
-            border-radius: 6px;
-            font-size: 0.9rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: background 0.15s;
-            text-align: center;
-        }
-        .remote-btn:hover { background: #eaeaea; }
-        .console-box {
-            background: #1e1e1e;
-            color: #00ff66;
-            padding: 14px;
-            border-radius: 6px;
-            max-height: 520px;
-            overflow-y: auto;
-            font-family: Consolas, "Courier New", monospace;
-            font-size: 0.84rem;
-            line-height: 1.45;
-            white-space: pre-wrap;
-            word-break: break-all;
-        }
-        .alert-box {
-            display: none;
-            padding: 10px 14px;
-            border-radius: 6px;
-            margin-bottom: 15px;
-        }
-        .alert-box.success { display: block; background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
-        .alert-box.error { display: block; background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
-        </style>
-
-        <div id="alertFeedback" class="alert-box"></div>
-
-        <div class="card-box">
-            <div class="card-header-bar">
-                <h2><?php echo __t('LOGGING.SECTION_TITLE', 'Logdatei & Diagnose'); ?> (panasonictv)</h2>
-                <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                    <button type="button" class="remote-btn" onclick="fetchLog()">↻ <?php echo __t('LOGGING.BTN_REFRESH_LOG', 'Aktualisieren'); ?></button>
-                    <button type="button" class="remote-btn" onclick="copyLog()">📋 <?php echo __t('LOGGING.BTN_COPY_LOG', 'Kopieren'); ?></button>
-                    <button type="button" class="remote-btn" onclick="downloadLog()">⬇ <?php echo __t('LOGGING.BTN_DOWNLOAD_LOG', 'Herunterladen'); ?></button>
-                    <button type="button" class="remote-btn" onclick="clearLog()">🗑 <?php echo __t('LOGGING.BTN_CLEAR_LOG', 'Log leeren'); ?></button>
-                    <a href="/admin/system/logmanager.cgi?package=panasonictv" class="remote-btn" style="text-decoration:none;">
-                        📂 <?php echo __t('LOGGING.BTN_OPEN_LOG_MANAGER', 'LoxBerry Log-Manager'); ?>
-                    </a>
-                </div>
-            </div>
-
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; font-size:0.85rem; color:#666;">
-                <span id="logFilePath">Lade Log...</span>
-                <label><input type="checkbox" id="chkAutoLog" onchange="toggleAutoLog()"> Auto-Refresh (5s)</label>
-            </div>
-            <div id="logOutput" class="console-box">Lade Logdatei...</div>
-        </div>
-    </div>
-
-    <script>
-    let autoLogTimer = null;
-
-    function showAlert(msg, isSuccess) {
-        const el = document.getElementById('alertFeedback');
-        el.textContent = msg;
-        el.className = 'alert-box ' + (isSuccess ? 'success' : 'error');
-        setTimeout(() => { el.className = 'alert-box'; }, 4000);
-    }
-
-    function fetchLog() {
-        fetch('ajax.php?action=get_log&lines=250')
-            .then(res => res.json())
-            .then(data => {
-                if (data.success) {
-                    document.getElementById('logFilePath').textContent = 'Pfad: ' + data.log_file;
-                    const el = document.getElementById('logOutput');
-                    el.textContent = data.content || '(Logdatei ist leer)';
-                    el.scrollTop = el.scrollHeight;
-                }
-            })
-            .catch(err => {
-                document.getElementById('logOutput').textContent = 'Fehler beim Laden des Logs: ' + err;
-            });
-    }
-
-    function clearLog() {
-        if (!confirm('Logdatei wirklich leeren?')) return;
-        fetch('ajax.php?action=clear_log')
-            .then(res => res.json())
-            .then(data => {
-                showAlert('Logdatei wurde geleert', true);
-                fetchLog();
-            });
-    }
-
-    function copyLog() {
-        const text = document.getElementById('logOutput').textContent;
-        if (navigator.clipboard && window.isSecureContext) {
-            navigator.clipboard.writeText(text).then(() => {
-                showAlert('Loginhalt in Zwischenablage kopiert!', true);
-            }).catch(() => {
-                fallbackCopy(text);
-            });
-        } else {
-            fallbackCopy(text);
-        }
-    }
-
-    function fallbackCopy(text) {
-        try {
-            const ta = document.createElement('textarea');
-            ta.value = text;
-            ta.style.position = 'fixed';
-            ta.style.top = '0';
-            ta.style.left = '0';
-            ta.style.opacity = '0';
-            document.body.appendChild(ta);
-            ta.focus();
-            ta.select();
-            const successful = document.execCommand('copy');
-            document.body.removeChild(ta);
-            if (successful) {
-                showAlert('Loginhalt in Zwischenablage kopiert!', true);
-            } else {
-                showAlert('Kopieren nicht unterstützt - bitte Text manuell markieren', false);
-            }
-        } catch (err) {
-            showAlert('Kopieren fehlgeschlagen: ' + err, false);
-        }
-    }
-
-    function downloadLog() {
-        const text = document.getElementById('logOutput').textContent;
-        const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'panasonictv_daemon.log';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-    }
-
-    function toggleAutoLog() {
-        const chk = document.getElementById('chkAutoLog');
-        if (chk.checked) {
-            if (!autoLogTimer) autoLogTimer = setInterval(fetchLog, 5000);
-        } else {
-            if (autoLogTimer) {
-                clearInterval(autoLogTimer);
-                autoLogTimer = null;
-            }
-        }
-    }
-
-    document.addEventListener('DOMContentLoaded', () => { fetchLog(); });
-    </script>
-    <?php
-    LBWeb::lbfooter();
-    exit;
-}
 ?>
 
 <div class="lb-content">
@@ -604,9 +402,6 @@ if ($form === 'logs') {
             <button type="button" class="remote-btn" onclick="copyLog()">📋 <?php echo __t('LOGGING.BTN_COPY_LOG', 'Kopieren'); ?></button>
             <button type="button" class="remote-btn" onclick="downloadLog()">⬇ <?php echo __t('LOGGING.BTN_DOWNLOAD_LOG', 'Herunterladen'); ?></button>
             <button type="button" class="remote-btn" onclick="clearLog()">🗑 <?php echo __t('LOGGING.BTN_CLEAR_LOG', 'Log leeren'); ?></button>
-            <a href="/admin/system/logmanager.cgi?package=panasonictv" class="remote-btn" style="text-decoration:none;">
-                📂 <?php echo __t('LOGGING.BTN_OPEN_LOG_MANAGER', 'LoxBerry Log-Manager'); ?>
-            </a>
         </div>
     </div>
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; font-size:0.85rem; color:#666;">
